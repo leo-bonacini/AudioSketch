@@ -1,0 +1,1585 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AudioSketch</title>
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #14171c;
+    --bg-panel: #1b1f26;
+    --bg-elevated: #232833;
+    --border: #2e3542;
+    --text: #e8eaed;
+    --text-dim: #9aa3b2;
+    --accent: #5aa9e6;
+    --accent-dim: #2f4a63;
+    --danger: #e15b64;
+    --ok: #5ec98f;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Top bar */
+  #topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+  }
+  #topbar .brand { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+  #topbar .brand img { width: 22px; height: 22px; display: block; }
+  #topbar h1 { font-size: 14px; font-weight: 600; margin: 0; white-space: nowrap; color: var(--text); }
+  #topbar h1 span { color: var(--text-dim); font-weight: 400; }
+  #topbar .spacer { flex: 1 1 auto; }
+
+  .btn {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent-dim); border-color: var(--accent); }
+  .btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; border-color: var(--border) !important; }
+
+  label.check { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+
+  /* Main layout */
+  #main { flex: 1 1 auto; display: flex; min-height: 0; }
+  #canvasArea { flex: 1 1 auto; position: relative; display: flex; flex-direction: column; min-width: 0; }
+
+  #toolbar {
+    position: absolute; top: 10px; left: 10px; z-index: 10;
+    display: flex; flex-direction: column; gap: 4px;
+    background: var(--bg-elevated); padding: 4px; border-radius: 8px; border: 1px solid var(--border);
+  }
+  .tool-btn {
+    width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+    padding: 0; background: transparent; border: 1px solid transparent; border-radius: 6px;
+    color: var(--text-dim); cursor: pointer;
+  }
+  .tool-btn:hover { color: var(--text); background: var(--bg-panel); }
+  .tool-btn.active { color: var(--text); background: var(--accent-dim); border-color: var(--accent); }
+  .tool-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  #toolHint {
+    position: absolute; top: 10px; left: 56px; right: 10px; z-index: 9; pointer-events: none;
+  }
+  #toolHint span {
+    display: inline-block; background: var(--bg-elevated); border: 1px solid var(--border);
+    color: var(--text-dim); font-size: 11.5px; padding: 5px 10px; border-radius: 6px;
+  }
+
+  #transport {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 10;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-elevated); padding: 4px 10px 4px 4px; border-radius: 8px; border: 1px solid var(--border);
+  }
+  #timeDisplay { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  #zoomControls {
+    position: absolute; bottom: 10px; right: 10px; z-index: 10;
+    display: flex; align-items: center; gap: 2px;
+    background: var(--bg-elevated); padding: 4px; border-radius: 8px; border: 1px solid var(--border);
+  }
+  #zoomControls .btn { padding: 5px 9px; }
+  #zoomPct { font-size: 11.5px; color: var(--text-dim); padding: 0 6px; min-width: 42px; text-align: center; }
+
+  #canvasWrap { flex: 1 1 auto; overflow-x: auto; overflow-y: hidden; background: #0d0f13; display: flex; }
+  #canvasWrap.empty { align-items: center; justify-content: center; }
+  #canvasWrap:not(.empty) { align-items: center; justify-content: flex-start; padding: 24px; }
+  #canvasWrap.dragover { outline: 2px dashed var(--accent); outline-offset: -8px; }
+  #stage { display: block; cursor: default; }
+  #stage.tool-region, #stage.tool-marker { cursor: crosshair; }
+  #stage.tool-zoom { cursor: zoom-in; }
+  #stage.tool-zoom.tool-zoom-out { cursor: zoom-out; }
+  #emptyState { color: var(--text-dim); text-align: center; padding: 40px; max-width: 380px; font-size: 13px; line-height: 1.6; }
+  #emptyState .btn { margin-top: 12px; }
+
+  #labelMenu {
+    position: fixed; z-index: 2000; min-width: 150px;
+    background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px;
+    padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  #labelMenu.hidden { display: none; }
+  #labelMenu .menu-item { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 5px; font-size: 12.5px; cursor: pointer; }
+  #labelMenu .menu-item:hover { background: var(--accent-dim); }
+  #labelMenu .menu-item.current { color: var(--accent); }
+  #labelMenu .menu-item.danger:hover { background: rgba(225,91,100,0.15); color: var(--danger); }
+  #labelMenu .menu-swatch { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; border: 1px solid rgba(255,255,255,0.3); }
+  #labelMenu .menu-sep { height: 1px; background: var(--border); margin: 4px 2px; }
+  #labelMenu .menu-empty { padding: 6px 9px; font-size: 12px; color: var(--text-dim); max-width: 200px; }
+
+  #sidebar {
+    width: 320px; flex: 0 0 auto; background: var(--bg-panel); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .sidebar-section { padding: 12px 14px; border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .sidebar-section.grow { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 90px; padding-bottom: 0; }
+  .sidebar-section h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim);
+    margin: 0 0 8px 0; display: flex; align-items: center; justify-content: space-between;
+  }
+  .list-scroll { overflow-y: auto; }
+  #clipList { max-height: 150px; }
+  #classList { max-height: 130px; }
+  #annotList { flex: 1 1 auto; min-height: 0; }
+
+  .row { display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 12.5px; }
+  .row:hover { background: var(--bg-elevated); }
+  .row.selected { background: var(--accent-dim); }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; border: 1px solid rgba(255,255,255,0.3); }
+  .row .rname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .rtype { color: var(--text-dim); font-size: 11px; flex: 0 0 auto; }
+  .row .rdel { opacity: 0.5; font-size: 12px; padding: 2px 5px; flex: 0 0 auto; }
+  .row .rdel:hover { opacity: 1; color: var(--danger); }
+  .empty-hint { padding: 14px; color: var(--text-dim); font-size: 12px; line-height: 1.5; }
+
+  .field-row { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
+  .field-row input, .field-row select {
+    background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text);
+    padding: 5px 7px; border-radius: 5px; font-size: 12.5px; min-width: 0;
+  }
+  .field-row input { flex: 1 1 auto; }
+  .field-row select { flex: 1 1 auto; }
+  .field-row label { font-size: 11.5px; color: var(--text-dim); flex: 0 0 36%; }
+
+  #tagChips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+  .chip { display: flex; align-items: center; gap: 5px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 3px 8px 3px 10px; font-size: 12px; }
+  .chip button { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 13px; padding: 0; line-height: 1; }
+  .chip button:hover { color: var(--danger); }
+
+  #bottomPanel { flex: 0 0 auto; max-height: 42vh; overflow-y: auto; }
+  #annotEditor.hidden { display: none; }
+  #annotEditor { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .meta-line { font-size: 11.5px; color: var(--text-dim); margin-top: 4px; }
+  .editor-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+  #statusbar {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 14px; background: var(--bg-panel); border-top: 1px solid var(--border);
+    font-size: 11.5px; color: var(--text-dim);
+  }
+  #statusbar .right { display: flex; gap: 14px; align-items: center; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="brand">
+    <img src="assets/logo.svg" alt="AudioSketch logo">
+    <h1>AudioSketch <span>· mark regions &amp; events, tag classes, export JSON</span></h1>
+  </div>
+  <div class="spacer"></div>
+  <input id="importAudioInput" type="file" accept="audio/*" multiple style="display:none">
+  <button class="btn" id="importAudioBtn">Import Audio</button>
+  <input id="importJsonInput" type="file" accept=".json" style="display:none">
+  <button class="btn" id="importJsonBtn">Import Labels JSON</button>
+  <label class="check"><input type="checkbox" id="embedAudioChk"> embed audio</label>
+  <button class="btn primary" id="exportBtn">Export Labels JSON</button>
+  <label class="check"><input type="checkbox" id="keepOriginalNamesChk" checked> keep original filenames in manifest</label>
+  <button class="btn primary" id="exportZipBtn" title="Renamed audio + per-clip label JSON + manifest, packaged as a .zip">Export Dataset (ZIP)</button>
+</div>
+
+<div id="main">
+  <div id="canvasArea">
+    <div id="toolbar">
+      <button class="tool-btn active" id="toolSelect" title="Select (V)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l7 16 2-7 7-2-16-7z"/></svg>
+      </button>
+      <button class="tool-btn" id="toolRegion" title="Region (R) — drag a time range">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="1"/><path d="M9 5v14M15 5v14"/></svg>
+      </button>
+      <button class="tool-btn" id="toolMarker" title="Marker (M) — click to place an event">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18"/><circle cx="12" cy="7" r="2.5"/></svg>
+      </button>
+      <button class="tool-btn" id="toolZoom" title="Zoom in (click again to switch to zoom out)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6M8 11h6"/></svg>
+      </button>
+    </div>
+    <div id="toolHint"><span id="toolHintText">Import audio to begin.</span></div>
+    <div id="transport">
+      <button class="tool-btn" id="playBtn" title="Play/Pause (Space)">
+        <svg id="playIcon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <span id="timeDisplay">0:00.0 / 0:00.0</span>
+      <button class="tool-btn" id="loopBtn" title="Loop the selected region during playback">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+      </button>
+    </div>
+    <div id="zoomControls">
+      <button class="btn" id="zoomOut" title="Zoom out">−</button>
+      <span id="zoomPct">100%</span>
+      <button class="btn" id="zoomIn" title="Zoom in">+</button>
+      <button class="btn" id="zoomFit" title="Fit to window">Fit</button>
+      <button class="btn" id="zoom100" title="Actual size">100%</button>
+    </div>
+    <div id="canvasWrap" class="empty" title="Scroll to zoom (toward cursor); Shift+scroll or drag the scrollbar to pan">
+      <div id="emptyState">
+        No audio loaded.<br>Drag &amp; drop audio files here, or use <b>Import Audio</b> above.
+        <br><button class="btn" id="emptyImportBtn">Import Audio</button>
+      </div>
+      <canvas id="stage" style="display:none;"></canvas>
+    </div>
+    <audio id="audioEl" preload="auto" style="display:none;"></audio>
+  </div>
+
+  <div id="sidebar">
+    <div class="sidebar-section">
+      <h2>Clips <span id="clipCount">0</span></h2>
+      <div id="clipList" class="list-scroll">
+        <div class="empty-hint">No clips yet.</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h2>Classes</h2>
+      <div class="field-row">
+        <input id="newClassInput" placeholder="New class name">
+        <button class="btn" id="addClassBtn">+ add</button>
+      </div>
+      <div id="classList" class="list-scroll">
+        <div class="empty-hint">Add a class, then pick region or marker to start tagging.</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section grow">
+      <h2>Annotations <span id="annotCount">0</span></h2>
+      <div id="annotList" class="list-scroll">
+        <div class="empty-hint">No annotations on this clip yet.</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" id="bottomPanel">
+      <h2>Clip tags</h2>
+      <div id="tagChips"></div>
+      <div class="field-row">
+        <input id="newTagInput" placeholder="Add a whole-clip tag, press Enter">
+      </div>
+
+      <div id="annotEditor" class="hidden">
+        <h2>Selected annotation</h2>
+        <div class="field-row">
+          <label>Class</label>
+          <select id="annotClassSelect"></select>
+        </div>
+        <div class="meta-line" id="annotMeta"></div>
+        <div class="editor-actions">
+          <button class="btn" id="previewBtn">▶ Preview</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="statusbar">
+  <div id="statusLeft">0 clips · 0 annotations</div>
+  <div class="right">
+    <span id="zoomStatus"></span>
+  </div>
+</div>
+
+<div id="labelMenu" class="hidden"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  const BASE_PPS = 100;          // pixels-per-second used to size the base (zoom=1) waveform bitmap
+  const MAX_TIMELINE_PX = 6000;  // cap on that base bitmap width, so peak computation stays cheap for long clips
+  const SAFE_CANVAS_W = 16000;   // hard ceiling on the *live* canvas width at any zoom (browser canvas-size limit)
+  const GLOBAL_MAX_ZOOM = 20;
+
+  // The canvas is always rendered at native 1:1 resolution (canvas.width == its own CSS width) — it is
+  // resized and fully redrawn on every zoom/pan change, rather than being CSS-stretched. That avoids the
+  // non-uniform-scaling distortion CSS stretching would cause (circular handles turning into ellipses, text
+  // glyphs stretching horizontally) since horizontal zoom here is intentionally independent of the fixed
+  // vertical waveform height. pps(clip) is the resulting current pixels-per-second at the live zoom level;
+  // all draw/hit-test code positions things in that space, so nothing needs a separate zoom-compensation factor.
+  function pps(clip) { return clip.pxPerSec * state.zoom; }
+  const RULER_H = 24;
+  const WAVE_H = 200;
+  const STAGE_HEIGHT = RULER_H + WAVE_H;
+  const MIN_REGION_DUR = 0.02;
+  const CANVAS_PAD = 24; // must match #canvasWrap:not(.empty) padding in CSS
+  const PALETTE = ['#5aa9e6', '#e1a35b', '#5ec98f', '#e15b64', '#c48be0', '#e6d95a'];
+
+  const state = {
+    clips: [],
+    currentClipId: null,
+    classes: [],
+    activeClassName: null,
+    selectedAnnotationId: null,
+    tool: 'select',
+    zoom: 1,
+    zoomDir: 'in',
+    playing: false,
+    loopSelection: false
+  };
+
+  let clipSeq = 0;
+  let annotSeq = 0;
+  let sharedAudioCtx = null;
+
+  let isPointerDown = false;
+  let dragStartX = null;
+  let draftRegion = null;
+  let isScrubbing = false;
+
+  let editMode = null; // null | 'move' | 'handle'
+  let editAnnotation = null;
+  let editHandleIndex = -1;
+  let editSnapshot = null;
+  let editDragOriginX = null;
+
+  const ICON_ZOOM_IN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6M8 11h6"/></svg>';
+  const ICON_ZOOM_OUT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>';
+  const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
+  const ICON_PAUSE = '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>';
+
+  // ---------- DOM refs ----------
+  const stage = document.getElementById('stage');
+  const ctx = stage.getContext('2d');
+  const canvasWrap = document.getElementById('canvasWrap');
+  const emptyState = document.getElementById('emptyState');
+  const toolHintText = document.getElementById('toolHintText');
+  const audioEl = document.getElementById('audioEl');
+
+  const clipListEl = document.getElementById('clipList');
+  const clipCountEl = document.getElementById('clipCount');
+  const classListEl = document.getElementById('classList');
+  const annotListEl = document.getElementById('annotList');
+  const annotCountEl = document.getElementById('annotCount');
+
+  const tagChipsEl = document.getElementById('tagChips');
+  const newTagInput = document.getElementById('newTagInput');
+  const annotEditor = document.getElementById('annotEditor');
+  const annotClassSelect = document.getElementById('annotClassSelect');
+  const annotMeta = document.getElementById('annotMeta');
+
+  const statusLeft = document.getElementById('statusLeft');
+  const zoomStatus = document.getElementById('zoomStatus');
+  const zoomPct = document.getElementById('zoomPct');
+  const labelMenu = document.getElementById('labelMenu');
+  const timeDisplay = document.getElementById('timeDisplay');
+  const playIcon = document.getElementById('playIcon');
+
+  // ---------- Helpers ----------
+  function currentClip() { return state.clips.find(c => c.id === state.currentClipId) || null; }
+  function classColor(name) { const c = state.classes.find(c => c.name === name); return c ? c.color : '#5aa9e6'; }
+  function hexToRgba(hex, alpha) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex) || [];
+    const r = parseInt(m[1] || '5a', 16), g = parseInt(m[2] || 'a9', 16), b = parseInt(m[3] || 'e6', 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+  function round2(n) { return Math.round(n * 100) / 100; }
+  function round4(n) { return Math.round(n * 10000) / 10000; }
+  function clampTime(t, duration) { return Math.max(0, Math.min(duration, t)); }
+  function formatTime(t) {
+    if (!isFinite(t) || t < 0) t = 0;
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+    const sStr = s.toFixed(1).padStart(4, '0');
+    return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sStr}` : `${m}:${sStr}`;
+  }
+
+  function getAudioContext() {
+    if (!sharedAudioCtx) sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return sharedAudioCtx;
+  }
+
+  // ---------- Audio import ----------
+  function uniqueName(name) {
+    let candidate = name, n = 2;
+    const taken = new Set(state.clips.map(c => c.filename));
+    while (taken.has(candidate)) {
+      const dot = name.lastIndexOf('.');
+      candidate = dot === -1 ? `${name} (${n})` : `${name.slice(0, dot)} (${n})${name.slice(dot)}`;
+      n++;
+    }
+    return candidate;
+  }
+
+  function dataUrlToBytes(dataUrl) {
+    const comma = dataUrl.indexOf(',');
+    const binary = atob(dataUrl.slice(comma + 1));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  function computePeaks(audioBuffer, width) {
+    const channels = audioBuffer.numberOfChannels;
+    const length = audioBuffer.length;
+    const bucketSize = Math.max(1, Math.floor(length / width));
+    const mins = new Float32Array(width);
+    const maxs = new Float32Array(width);
+    const chData = [];
+    for (let c = 0; c < channels; c++) chData.push(audioBuffer.getChannelData(c));
+    for (let x = 0; x < width; x++) {
+      const start = x * bucketSize;
+      const end = Math.min(length, start + bucketSize);
+      let mn = 0, mx = 0;
+      for (let i = start; i < end; i++) {
+        let sum = 0;
+        for (let c = 0; c < channels; c++) sum += chData[c][i];
+        const v = sum / channels;
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+      }
+      mins[x] = mn; maxs[x] = mx;
+    }
+    return { mins, maxs };
+  }
+
+  function buildWaveLayer(clip) {
+    const c = document.createElement('canvas');
+    c.width = clip.workingWidth;
+    c.height = WAVE_H;
+    const cx = c.getContext('2d');
+    const mid = WAVE_H / 2;
+    cx.fillStyle = 'rgba(90,169,230,0.55)';
+    for (let x = 0; x < clip.workingWidth; x++) {
+      const mn = clip.mins[x], mx = clip.maxs[x];
+      const y1 = mid - mx * (mid - 4);
+      const y2 = mid - mn * (mid - 4);
+      cx.fillRect(x, y1, 1, Math.max(1, y2 - y1));
+    }
+    cx.strokeStyle = 'rgba(255,255,255,0.15)';
+    cx.beginPath(); cx.moveTo(0, mid); cx.lineTo(clip.workingWidth, mid); cx.stroke();
+    clip.waveLayer = c;
+  }
+
+  function addClip(filename, dataUrl, audioBuffer) {
+    const duration = Math.max(audioBuffer.duration, 0.05);
+    const pxPerSec = Math.min(BASE_PPS, MAX_TIMELINE_PX / duration);
+    const workingWidth = Math.max(20, Math.round(duration * pxPerSec));
+    const { mins, maxs } = computePeaks(audioBuffer, workingWidth);
+    const id = ++clipSeq;
+    const clip = {
+      id, filename: uniqueName(filename), dataUrl,
+      duration, sampleRate: audioBuffer.sampleRate, channelCount: audioBuffer.numberOfChannels,
+      pxPerSec, workingWidth, mins, maxs, waveLayer: null,
+      tags: [], annotations: [],
+      hashId: computeHashId(dataUrl)
+    };
+    buildWaveLayer(clip);
+    state.clips.push(clip);
+    renderClipList();
+    if (state.currentClipId == null) setActiveClip(id);
+    updateStatus();
+  }
+
+  function loadAudioFile(file) {
+    if (!file.type || !file.type.startsWith('audio/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const bytes = dataUrlToBytes(dataUrl);
+      getAudioContext().decodeAudioData(bytes.buffer.slice(0)).then(audioBuffer => {
+        addClip(file.name, dataUrl, audioBuffer);
+      }).catch(() => {
+        alert(`Could not decode "${file.name}" as audio.`);
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  document.getElementById('importAudioBtn').addEventListener('click', () => document.getElementById('importAudioInput').click());
+  document.getElementById('emptyImportBtn').addEventListener('click', () => document.getElementById('importAudioInput').click());
+  document.getElementById('importAudioInput').addEventListener('change', (e) => {
+    Array.from(e.target.files).forEach(loadAudioFile);
+    e.target.value = '';
+  });
+  canvasWrap.addEventListener('dragover', (e) => { e.preventDefault(); canvasWrap.classList.add('dragover'); });
+  canvasWrap.addEventListener('dragleave', () => canvasWrap.classList.remove('dragover'));
+  canvasWrap.addEventListener('drop', (e) => {
+    e.preventDefault();
+    canvasWrap.classList.remove('dragover');
+    Array.from(e.dataTransfer.files).forEach(loadAudioFile);
+  });
+
+  function deleteClip(id) {
+    state.clips = state.clips.filter(c => c.id !== id);
+    if (state.currentClipId === id) {
+      state.currentClipId = null;
+      state.selectedAnnotationId = null;
+      if (state.clips.length) setActiveClip(state.clips[0].id);
+      else { pause(); showEmpty(); renderAll(); }
+    } else {
+      renderClipList();
+      updateStatus();
+    }
+  }
+
+  function renderClipList() {
+    clipCountEl.textContent = state.clips.length;
+    if (!state.clips.length) {
+      clipListEl.innerHTML = '<div class="empty-hint">No clips yet.</div>';
+      return;
+    }
+    clipListEl.innerHTML = '';
+    state.clips.forEach(c => {
+      const row = document.createElement('div');
+      row.className = 'row' + (c.id === state.currentClipId ? ' selected' : '');
+      const name = document.createElement('div');
+      name.className = 'rname';
+      name.textContent = c.filename;
+      const dur = document.createElement('div');
+      dur.className = 'rtype';
+      dur.textContent = formatTime(c.duration);
+      const del = document.createElement('div');
+      del.className = 'rdel';
+      del.textContent = '✕';
+      del.title = 'Remove clip';
+      del.addEventListener('click', (ev) => { ev.stopPropagation(); deleteClip(c.id); });
+      row.appendChild(name);
+      row.appendChild(dur);
+      row.appendChild(del);
+      row.addEventListener('click', () => setActiveClip(c.id));
+      clipListEl.appendChild(row);
+    });
+  }
+
+  // ---------- Active clip / canvas setup ----------
+  function showEmpty() {
+    canvasWrap.classList.add('empty');
+    emptyState.style.display = 'block';
+    stage.style.display = 'none';
+    toolHintText.textContent = 'Import audio to begin.';
+  }
+  function showCanvas() {
+    canvasWrap.classList.remove('empty');
+    emptyState.style.display = 'none';
+    stage.style.display = 'block';
+  }
+
+  function setActiveClip(id) {
+    pause();
+    state.currentClipId = id;
+    state.selectedAnnotationId = null;
+    draftRegion = null; isPointerDown = false; isScrubbing = false;
+    endEditDrag();
+    const clip = currentClip();
+    if (!clip) { showEmpty(); renderAll(); return; }
+    showCanvas();
+    audioEl.src = clip.dataUrl;
+    audioEl.currentTime = 0;
+    fitZoom();
+    renderAll();
+  }
+
+  // ---------- Zoom ----------
+  // Max zoom is capped per-clip so the live canvas width (workingWidth * zoom) never exceeds a safe
+  // browser canvas-size ceiling — long clips (already at a wide base workingWidth) get proportionally
+  // less zoom headroom than short ones.
+  function maxZoomFor(clip) { return Math.max(0.02, Math.min(GLOBAL_MAX_ZOOM, SAFE_CANVAS_W / clip.workingWidth)); }
+
+  function fitZoom() {
+    const clip = currentClip();
+    if (!clip) return;
+    const cw = canvasWrap.clientWidth - CANVAS_PAD * 2;
+    setZoom(Math.max(0.02, cw / clip.workingWidth));
+  }
+  function setZoom(z, clientX) {
+    const clip = currentClip();
+    if (!clip) {
+      state.zoom = Math.max(0.02, Math.min(z, GLOBAL_MAX_ZOOM));
+      zoomPct.textContent = Math.round(state.zoom * 100) + '%';
+      return;
+    }
+    const newZoom = Math.max(0.02, Math.min(z, maxZoomFor(clip)));
+
+    const rectWrap = canvasWrap.getBoundingClientRect();
+    if (clientX == null) clientX = rectWrap.left + rectWrap.width / 2;
+    const timeAtCursor = (canvasWrap.scrollLeft + (clientX - rectWrap.left) - CANVAS_PAD) / pps(clip);
+
+    state.zoom = newZoom;
+    // resize the canvas's own pixel buffer (not a CSS stretch) so drawing always stays native 1:1
+    stage.width = Math.max(1, Math.round(clip.workingWidth * state.zoom));
+    stage.height = STAGE_HEIGHT;
+    zoomPct.textContent = Math.round(state.zoom * 100) + '%';
+
+    canvasWrap.scrollLeft = timeAtCursor * pps(clip) + CANVAS_PAD - (clientX - rectWrap.left);
+    redrawCanvas();
+    updateStatus();
+  }
+  document.getElementById('zoomIn').addEventListener('click', () => setZoom(state.zoom * 1.25));
+  document.getElementById('zoomOut').addEventListener('click', () => setZoom(state.zoom / 1.25));
+  document.getElementById('zoomFit').addEventListener('click', fitZoom);
+  document.getElementById('zoom100').addEventListener('click', () => setZoom(1));
+
+  canvasWrap.addEventListener('wheel', (e) => {
+    if (!currentClip()) return;
+    if (e.shiftKey) return; // let the browser's native shift+scroll horizontal pan happen
+    e.preventDefault();
+    const factor = Math.exp(-e.deltaY * 0.01);
+    setZoom(state.zoom * factor, e.clientX);
+  }, { passive: false });
+
+  // ---------- Classes ----------
+  function addClass(name) {
+    name = name.trim();
+    if (!name) return;
+    if (!state.classes.some(c => c.name === name)) {
+      const color = PALETTE[state.classes.length % PALETTE.length];
+      state.classes.push({ name, color });
+    }
+    state.activeClassName = name;
+    renderClassList();
+  }
+  function deleteClass(name) {
+    state.classes = state.classes.filter(c => c.name !== name);
+    if (state.activeClassName === name) state.activeClassName = state.classes.length ? state.classes[0].name : null;
+    renderClassList();
+  }
+  function setActiveClass(name) { state.activeClassName = name; renderClassList(); }
+
+  document.getElementById('addClassBtn').addEventListener('click', () => {
+    const input = document.getElementById('newClassInput');
+    addClass(input.value);
+    input.value = '';
+  });
+  document.getElementById('newClassInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('addClassBtn').click();
+  });
+
+  function renderClassList() {
+    if (!state.classes.length) {
+      classListEl.innerHTML = '<div class="empty-hint">Add a class, then pick region or marker to start tagging.</div>';
+    } else {
+      classListEl.innerHTML = '';
+      state.classes.forEach(c => {
+        const row = document.createElement('div');
+        row.className = 'row' + (c.name === state.activeClassName ? ' selected' : '');
+        const sw = document.createElement('div'); sw.className = 'swatch'; sw.style.background = c.color;
+        const name = document.createElement('div'); name.className = 'rname'; name.textContent = c.name;
+        const del = document.createElement('div'); del.className = 'rdel'; del.textContent = '✕'; del.title = 'Remove class';
+        del.addEventListener('click', (ev) => { ev.stopPropagation(); deleteClass(c.name); });
+        row.appendChild(sw); row.appendChild(name); row.appendChild(del);
+        row.addEventListener('click', () => setActiveClass(c.name));
+        classListEl.appendChild(row);
+      });
+    }
+    populateAnnotClassSelect();
+  }
+
+  // ---------- Tools ----------
+  function setTool(tool) {
+    if (tool !== 'select' && !currentClip()) return;
+    state.tool = tool;
+    draftRegion = null; isPointerDown = false;
+    endEditDrag();
+    stage.style.cursor = '';
+    document.getElementById('toolSelect').classList.toggle('active', tool === 'select');
+    document.getElementById('toolRegion').classList.toggle('active', tool === 'region');
+    document.getElementById('toolMarker').classList.toggle('active', tool === 'marker');
+    document.getElementById('toolZoom').classList.toggle('active', tool === 'zoom');
+    stage.classList.toggle('tool-region', tool === 'region');
+    stage.classList.toggle('tool-marker', tool === 'marker');
+    stage.classList.toggle('tool-zoom', tool === 'zoom');
+    updateZoomToolUI();
+    hideLabelMenu();
+    if (currentClip()) {
+      toolHintText.textContent =
+        tool === 'select' ? 'Click a shape to select it, drag its body to move it, drag an edge to resize. Click empty waveform to seek/scrub. Right-click a shape to relabel it.' :
+        tool === 'region' ? 'Drag to mark a time range. Returns to select after each region.' :
+        tool === 'marker' ? 'Click to drop an event marker. Stays active — click again for the next one, Esc to stop.' :
+        (state.zoomDir === 'out' ? 'Click to zoom out. Alt/right-click or click this tool again to switch back to zoom in.' : 'Click to zoom in. Alt+click, right-click, or click this tool again to zoom out.');
+    }
+    redrawCanvas();
+  }
+  document.getElementById('toolSelect').addEventListener('click', () => setTool('select'));
+  document.getElementById('toolRegion').addEventListener('click', () => { if (requireClass()) setTool('region'); });
+  document.getElementById('toolMarker').addEventListener('click', () => { if (requireClass()) setTool('marker'); });
+  document.getElementById('toolZoom').addEventListener('click', () => {
+    if (!currentClip()) return;
+    if (state.tool === 'zoom') {
+      state.zoomDir = state.zoomDir === 'in' ? 'out' : 'in';
+      updateZoomToolUI();
+    } else {
+      state.zoomDir = 'in';
+      setTool('zoom');
+    }
+  });
+  function updateZoomToolUI() {
+    const btn = document.getElementById('toolZoom');
+    const out = state.tool === 'zoom' && state.zoomDir === 'out';
+    btn.innerHTML = out ? ICON_ZOOM_OUT : ICON_ZOOM_IN;
+    btn.title = out ? 'Zoom out (click again for zoom in)' : 'Zoom in (click again for zoom out)';
+    stage.classList.toggle('tool-zoom-out', out);
+  }
+  function requireClass() {
+    if (!currentClip()) return false;
+    if (!state.activeClassName) {
+      alert('Add a class first (sidebar → Classes), then pick region or marker.');
+      document.getElementById('newClassInput').focus();
+      return false;
+    }
+    return true;
+  }
+
+  // ---------- Canvas geometry ----------
+  function getCanvasPos(e) {
+    const rect = stage.getBoundingClientRect();
+    const scaleX = stage.width / rect.width;
+    const scaleY = stage.height / rect.height;
+    const x = Math.max(0, Math.min(stage.width, (e.clientX - rect.left) * scaleX));
+    const y = Math.max(0, Math.min(stage.height, (e.clientY - rect.top) * scaleY));
+    return { x, y };
+  }
+  // Constant screen-pixel tolerances: the canvas is always native 1:1, so a fixed pixel
+  // count is a fixed, zoom-independent click tolerance (as opposed to a fixed *time* tolerance).
+  function handleRadius() { return 8; }
+  function markerHitTol() { return 6; }
+
+  function hitTest(pos) {
+    const clip = currentClip();
+    if (!clip) return null;
+    const p = pps(clip);
+    for (let i = clip.annotations.length - 1; i >= 0; i--) {
+      const a = clip.annotations[i];
+      if (a.type === 'region') {
+        const x1 = a.start * p, x2 = a.end * p;
+        if (pos.x >= x1 && pos.x <= x2) return a;
+      } else {
+        const x = a.time * p;
+        if (Math.abs(pos.x - x) <= markerHitTol()) return a;
+      }
+    }
+    return null;
+  }
+  function hitTestHandle(pos, a) {
+    if (!a || a.type !== 'region') return -1;
+    const clip = currentClip();
+    const p = pps(clip);
+    const tol = handleRadius();
+    const x1 = a.start * p, x2 = a.end * p;
+    if (Math.abs(pos.x - x1) <= tol) return 0;
+    if (Math.abs(pos.x - x2) <= tol) return 1;
+    return -1;
+  }
+  function selectedAnnotation() {
+    const clip = currentClip();
+    return clip ? clip.annotations.find(a => a.id === state.selectedAnnotationId) : null;
+  }
+
+  function beginEditDrag(annotation, mode, pos, handleIndex) {
+    editMode = mode;
+    editAnnotation = annotation;
+    editHandleIndex = handleIndex == null ? -1 : handleIndex;
+    editDragOriginX = pos.x;
+    editSnapshot = annotation.type === 'region' ? { start: annotation.start, end: annotation.end } : { time: annotation.time };
+  }
+  function applyEditDrag(pos) {
+    const clip = currentClip();
+    const a = editAnnotation;
+    if (!a || !clip) return;
+    const p = pps(clip);
+    const t = clampTime(pos.x / p, clip.duration);
+    if (editMode === 'handle') {
+      if (editHandleIndex === 0) a.start = Math.min(t, a.end - MIN_REGION_DUR);
+      else a.end = Math.max(t, a.start + MIN_REGION_DUR);
+    } else if (editMode === 'move') {
+      const dt = (pos.x - editDragOriginX) / p;
+      if (a.type === 'region') {
+        const s = editSnapshot, dur = s.end - s.start;
+        let ns = Math.max(0, Math.min(clip.duration - dur, s.start + dt));
+        a.start = ns; a.end = ns + dur;
+      } else {
+        a.time = clampTime(editSnapshot.time + dt, clip.duration);
+      }
+    }
+  }
+  function endEditDrag() {
+    editMode = null; editAnnotation = null; editHandleIndex = -1; editSnapshot = null; editDragOriginX = null;
+  }
+
+  function seekTo(t) {
+    const clip = currentClip();
+    if (!clip) return;
+    audioEl.currentTime = clampTime(t, clip.duration);
+    redrawCanvas();
+    updateTransportUI();
+  }
+
+  stage.addEventListener('mousedown', (e) => {
+    const clip = currentClip();
+    if (!clip) return;
+
+    if (state.tool === 'zoom') {
+      if (e.button !== 0 && e.button !== 2) return;
+      e.preventDefault();
+      const zoomOut = e.button === 2 || e.altKey || state.zoomDir === 'out';
+      setZoom(state.zoom * (zoomOut ? 1 / 1.5 : 1.5), e.clientX);
+      return;
+    }
+    if (e.button !== 0) return;
+
+    const pos = getCanvasPos(e);
+    const p = pps(clip);
+    if (state.tool === 'select') {
+      hideLabelMenu();
+      const sel = selectedAnnotation();
+      const hIdx = sel ? hitTestHandle(pos, sel) : -1;
+      if (hIdx !== -1) { beginEditDrag(sel, 'handle', pos, hIdx); return; }
+      const hit = hitTest(pos);
+      if (hit) {
+        if (hit.id !== state.selectedAnnotationId) selectAnnotation(hit.id);
+        beginEditDrag(hit, 'move', pos);
+      } else {
+        selectAnnotation(null);
+        isScrubbing = true;
+        seekTo(pos.x / p);
+      }
+    } else if (state.tool === 'region') {
+      isPointerDown = true;
+      dragStartX = pos.x;
+      draftRegion = { start: pos.x / p, end: pos.x / p };
+    } else if (state.tool === 'marker') {
+      finalizeMarker(pos.x / p);
+    }
+  });
+
+  stage.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (state.tool !== 'select') return;
+    const clip = currentClip();
+    if (!clip) return;
+    const pos = getCanvasPos(e);
+    const hit = hitTest(pos);
+    if (!hit) { hideLabelMenu(); return; }
+    if (hit.id !== state.selectedAnnotationId) selectAnnotation(hit.id);
+    showLabelMenu(hit, e.clientX, e.clientY);
+  });
+
+  stage.addEventListener('mousemove', (e) => {
+    const clip = currentClip();
+    if (!clip) return;
+    const pos = getCanvasPos(e);
+    if (isScrubbing) { seekTo(pos.x / pps(clip)); return; }
+    if (editMode && editAnnotation) { applyEditDrag(pos); redrawCanvas(); return; }
+    if (state.tool === 'region' && isPointerDown) {
+      const p = pps(clip);
+      draftRegion = { start: Math.min(dragStartX, pos.x) / p, end: Math.max(dragStartX, pos.x) / p };
+      redrawCanvas();
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (isScrubbing) isScrubbing = false;
+    if (editMode) {
+      endEditDrag();
+      renderBottomPanel();
+      renderAnnotList();
+      redrawCanvas();
+    }
+    if (state.tool === 'region' && isPointerDown) {
+      isPointerDown = false;
+      if (draftRegion && draftRegion.end - draftRegion.start > MIN_REGION_DUR) finalizeRegion(draftRegion);
+      draftRegion = null; dragStartX = null;
+      setTool('select');
+    }
+  });
+
+  function finalizeRegion(r) {
+    const clip = currentClip();
+    if (!clip || !state.activeClassName) return;
+    const id = ++annotSeq;
+    clip.annotations.push({ id, type: 'region', class: state.activeClassName, color: classColor(state.activeClassName), start: r.start, end: r.end });
+    selectAnnotation(id);
+    renderClipList();
+  }
+  function finalizeMarker(t) {
+    const clip = currentClip();
+    if (!clip || !state.activeClassName) return;
+    const id = ++annotSeq;
+    clip.annotations.push({ id, type: 'marker', class: state.activeClassName, color: classColor(state.activeClassName), time: clampTime(t, clip.duration) });
+    selectAnnotation(id);
+    renderClipList();
+    redrawCanvas();
+  }
+
+  window.addEventListener('keydown', (e) => {
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (e.key === 'Escape') {
+      draftRegion = null; isPointerDown = false;
+      hideLabelMenu();
+      selectAnnotation(null);
+      setTool('select');
+    } else if (e.key === ' ') {
+      if (currentClip()) { e.preventDefault(); togglePlay(); }
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedAnnotationId != null) {
+      e.preventDefault();
+      deleteAnnotation(state.selectedAnnotationId);
+    } else if (e.key === 'v' || e.key === 'V') setTool('select');
+    else if ((e.key === 'r' || e.key === 'R') && requireClass()) setTool('region');
+    else if ((e.key === 'm' || e.key === 'M') && requireClass()) setTool('marker');
+    else if ((e.key === 'z' || e.key === 'Z') && currentClip()) { state.zoomDir = 'in'; setTool('zoom'); }
+    else if ((e.key === '+' || e.key === '=') && currentClip()) setZoom(state.zoom * 1.25);
+    else if (e.key === '-' && currentClip()) setZoom(state.zoom / 1.25);
+    else if (e.key === '0' && currentClip()) fitZoom();
+    else if (e.key === 'ArrowLeft' && currentClip()) seekTo(audioEl.currentTime - (e.shiftKey ? 5 : 1));
+    else if (e.key === 'ArrowRight' && currentClip()) seekTo(audioEl.currentTime + (e.shiftKey ? 5 : 1));
+  });
+
+  // ---------- Playback ----------
+  let rafId = null;
+  function play() { if (currentClip()) audioEl.play(); }
+  function pause() { audioEl.pause(); }
+  function togglePlay() { if (audioEl.paused) play(); else pause(); }
+
+  document.getElementById('playBtn').addEventListener('click', togglePlay);
+  document.getElementById('loopBtn').addEventListener('click', () => {
+    state.loopSelection = !state.loopSelection;
+    document.getElementById('loopBtn').classList.toggle('active', state.loopSelection);
+  });
+  document.getElementById('previewBtn').addEventListener('click', () => {
+    const sel = selectedAnnotation();
+    if (!sel) return;
+    seekTo(sel.type === 'region' ? sel.start : Math.max(0, sel.time - 0.15));
+    play();
+  });
+
+  audioEl.addEventListener('play', () => { state.playing = true; updateTransportUI(); startPlayheadLoop(); });
+  audioEl.addEventListener('pause', () => { state.playing = false; updateTransportUI(); stopPlayheadLoop(); });
+  audioEl.addEventListener('ended', () => { state.playing = false; updateTransportUI(); });
+  audioEl.addEventListener('timeupdate', () => {
+    const sel = selectedAnnotation();
+    if (state.loopSelection && sel && sel.type === 'region' && audioEl.currentTime >= sel.end) {
+      audioEl.currentTime = sel.start;
+    }
+  });
+
+  function startPlayheadLoop() {
+    function tick() {
+      redrawCanvas();
+      updateTransportUI();
+      ensurePlayheadVisible();
+      if (state.playing) rafId = requestAnimationFrame(tick);
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+  function stopPlayheadLoop() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    redrawCanvas();
+    updateTransportUI();
+  }
+  function ensurePlayheadVisible() {
+    const clip = currentClip();
+    if (!clip) return;
+    const x = audioEl.currentTime * pps(clip) + CANVAS_PAD;
+    const viewLeft = canvasWrap.scrollLeft, viewRight = viewLeft + canvasWrap.clientWidth;
+    if (x < viewLeft || x > viewRight) canvasWrap.scrollLeft = x - canvasWrap.clientWidth / 2;
+  }
+  function updateTransportUI() {
+    const clip = currentClip();
+    playIcon.innerHTML = state.playing ? ICON_PAUSE : ICON_PLAY;
+    timeDisplay.textContent = clip ? `${formatTime(audioEl.currentTime)} / ${formatTime(clip.duration)}` : '0:00.0 / 0:00.0';
+  }
+
+  // ---------- Rendering ----------
+  function redrawCanvas() {
+    const clip = currentClip();
+    if (!clip) return;
+    ctx.clearRect(0, 0, stage.width, stage.height);
+    ctx.fillStyle = '#1b1f26';
+    ctx.fillRect(0, 0, stage.width, RULER_H);
+    drawRuler(clip);
+    if (clip.waveLayer) {
+      // the cached waveform bitmap is a fixed clip.workingWidth wide; scale it to the live
+      // (zoomed) canvas width — nearest-neighbor so a deep zoom reads as an honest "blown up
+      // pixel", not a blurred guess at detail the precomputed peaks don't actually have
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(clip.waveLayer, 0, 0, clip.workingWidth, WAVE_H, 0, RULER_H, stage.width, WAVE_H);
+    }
+    clip.annotations.forEach(a => drawAnnotation(a, a.id === state.selectedAnnotationId, clip));
+    if (state.tool === 'region' && draftRegion) drawDraftRegion(draftRegion, clip);
+    drawPlayhead(clip);
+  }
+
+  function niceStep(targetPxSpacing, currentPps) {
+    const candidates = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
+    for (const step of candidates) {
+      if (step * currentPps >= targetPxSpacing) return step;
+    }
+    return candidates[candidates.length - 1];
+  }
+  function drawRuler(clip) {
+    const p = pps(clip);
+    const step = niceStep(70, p);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillStyle = '#9aa3b2';
+    ctx.font = '11px -apple-system, sans-serif';
+    ctx.lineWidth = 1;
+    for (let t = 0; t <= clip.duration + step; t += step) {
+      const x = t * p;
+      ctx.beginPath(); ctx.moveTo(x, RULER_H - 6); ctx.lineTo(x, RULER_H); ctx.stroke();
+      ctx.fillText(formatTime(t), x + 3, RULER_H - 8);
+    }
+  }
+  function drawPlayhead(clip) {
+    const x = audioEl.currentTime * pps(clip);
+    ctx.strokeStyle = '#e6d95a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, stage.height); ctx.stroke();
+  }
+  function drawDraftRegion(r, clip) {
+    const p = pps(clip);
+    const x1 = r.start * p, x2 = r.end * p;
+    ctx.fillStyle = 'rgba(90,169,230,0.25)';
+    ctx.fillRect(x1, RULER_H, x2 - x1, WAVE_H);
+    ctx.strokeStyle = '#5aa9e6';
+    ctx.setLineDash([6, 4]);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x1, RULER_H, x2 - x1, WAVE_H);
+    ctx.setLineDash([]);
+  }
+  function drawAnnotation(a, selected, clip) {
+    const p = pps(clip);
+    const lw = 2;
+    if (a.type === 'region') {
+      const x1 = a.start * p, x2 = a.end * p;
+      ctx.fillStyle = hexToRgba(a.color, selected ? 0.35 : 0.2);
+      ctx.fillRect(x1, RULER_H, x2 - x1, WAVE_H);
+      ctx.strokeStyle = a.color;
+      ctx.lineWidth = selected ? lw * 1.6 : lw;
+      ctx.strokeRect(x1, RULER_H, x2 - x1, WAVE_H);
+      if (selected) {
+        drawHandle(x1, RULER_H + WAVE_H / 2, a.color);
+        drawHandle(x2, RULER_H + WAVE_H / 2, a.color);
+      }
+      drawLabelChip(a, x1);
+    } else {
+      const x = a.time * p;
+      ctx.strokeStyle = a.color;
+      ctx.lineWidth = selected ? lw * 1.6 : lw;
+      ctx.beginPath(); ctx.moveTo(x, RULER_H); ctx.lineTo(x, RULER_H + WAVE_H); ctx.stroke();
+      if (selected) drawHandle(x, RULER_H + WAVE_H / 2, a.color);
+      drawLabelChip(a, x);
+    }
+  }
+  function drawHandle(x, y, color) {
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#14171c';
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  }
+  function drawLabelChip(a, anchorX) {
+    const fontPx = 12;
+    ctx.font = `600 ${fontPx}px -apple-system, sans-serif`;
+    const textW = ctx.measureText(a.class).width;
+    const padX = 5, padY = 3;
+    const chipH = fontPx + padY * 2;
+    const chipY = RULER_H + 2;
+    ctx.fillStyle = a.color;
+    ctx.fillRect(anchorX, chipY, textW + padX * 2, chipH);
+    ctx.fillStyle = '#14171c';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(a.class, anchorX + padX, chipY + chipH / 2);
+  }
+
+  // ---------- Annotation list / selection ----------
+  function selectAnnotation(id) {
+    state.selectedAnnotationId = id;
+    renderAnnotList();
+    renderBottomPanel();
+    redrawCanvas();
+  }
+  function deleteAnnotation(id) {
+    const clip = currentClip();
+    if (!clip) return;
+    clip.annotations = clip.annotations.filter(a => a.id !== id);
+    if (state.selectedAnnotationId === id) state.selectedAnnotationId = null;
+    renderAnnotList();
+    renderBottomPanel();
+    renderClipList();
+    redrawCanvas();
+    updateStatus();
+  }
+
+  function annotLabel(a) {
+    return a.type === 'region' ? `${formatTime(a.start)}–${formatTime(a.end)}` : formatTime(a.time);
+  }
+  function renderAnnotList() {
+    const clip = currentClip();
+    const list = clip ? clip.annotations : [];
+    annotCountEl.textContent = list.length;
+    if (!list.length) {
+      annotListEl.innerHTML = '<div class="empty-hint">No annotations on this clip yet.</div>';
+      updateStatus();
+      return;
+    }
+    annotListEl.innerHTML = '';
+    list.forEach(a => {
+      const row = document.createElement('div');
+      row.className = 'row' + (a.id === state.selectedAnnotationId ? ' selected' : '');
+      const sw = document.createElement('div'); sw.className = 'swatch'; sw.style.background = a.color;
+      const name = document.createElement('div'); name.className = 'rname'; name.textContent = a.class;
+      const type = document.createElement('div'); type.className = 'rtype'; type.textContent = annotLabel(a);
+      const del = document.createElement('div'); del.className = 'rdel'; del.textContent = '✕'; del.title = 'Delete annotation';
+      del.addEventListener('click', (ev) => { ev.stopPropagation(); deleteAnnotation(a.id); });
+      row.appendChild(sw); row.appendChild(name); row.appendChild(type); row.appendChild(del);
+      row.addEventListener('click', () => selectAnnotation(a.id));
+      annotListEl.appendChild(row);
+    });
+    updateStatus();
+  }
+
+  // ---------- Bottom panel: tags + attribute editor ----------
+  function renderTagChips() {
+    const clip = currentClip();
+    tagChipsEl.innerHTML = '';
+    if (!clip) return;
+    clip.tags.forEach(tag => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      const span = document.createElement('span'); span.textContent = tag;
+      const rm = document.createElement('button'); rm.textContent = '×';
+      rm.addEventListener('click', () => {
+        clip.tags = clip.tags.filter(t => t !== tag);
+        renderTagChips();
+        renderClipList();
+      });
+      chip.appendChild(span); chip.appendChild(rm);
+      tagChipsEl.appendChild(chip);
+    });
+  }
+  newTagInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const clip = currentClip();
+    if (!clip) return;
+    const val = newTagInput.value.trim();
+    if (val && !clip.tags.includes(val)) clip.tags.push(val);
+    newTagInput.value = '';
+    renderTagChips();
+  });
+
+  function populateAnnotClassSelect() {
+    annotClassSelect.innerHTML = '';
+    const sel = selectedAnnotation();
+    const names = state.classes.map(c => c.name);
+    if (sel && !names.includes(sel.class)) names.unshift(sel.class);
+    names.forEach(n => {
+      const opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      annotClassSelect.appendChild(opt);
+    });
+    if (sel) annotClassSelect.value = sel.class;
+  }
+  function setAnnotationClass(a, className) {
+    a.class = className;
+    a.color = classColor(className);
+    renderAnnotList();
+    if (a.id === state.selectedAnnotationId) renderBottomPanel();
+    redrawCanvas();
+  }
+  annotClassSelect.addEventListener('change', () => {
+    const sel = selectedAnnotation();
+    if (!sel) return;
+    setAnnotationClass(sel, annotClassSelect.value);
+  });
+
+  // ---------- Right-click label menu ----------
+  function hideLabelMenu() { labelMenu.classList.add('hidden'); }
+  function showLabelMenu(annotation, x, y) {
+    labelMenu.innerHTML = '';
+    if (!state.classes.length) {
+      const empty = document.createElement('div');
+      empty.className = 'menu-empty';
+      empty.textContent = 'Add a class in the sidebar first, then right-click a shape to relabel it.';
+      labelMenu.appendChild(empty);
+    } else {
+      state.classes.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'menu-item' + (c.name === annotation.class ? ' current' : '');
+        const sw = document.createElement('span'); sw.className = 'menu-swatch'; sw.style.background = c.color;
+        const label = document.createElement('span'); label.textContent = c.name;
+        item.appendChild(sw); item.appendChild(label);
+        item.addEventListener('click', () => { setAnnotationClass(annotation, c.name); hideLabelMenu(); });
+        labelMenu.appendChild(item);
+      });
+      const sep = document.createElement('div'); sep.className = 'menu-sep';
+      labelMenu.appendChild(sep);
+    }
+    const del = document.createElement('div');
+    del.className = 'menu-item danger';
+    del.textContent = 'Delete annotation';
+    del.addEventListener('click', () => { deleteAnnotation(annotation.id); hideLabelMenu(); });
+    labelMenu.appendChild(del);
+
+    labelMenu.style.left = x + 'px';
+    labelMenu.style.top = y + 'px';
+    labelMenu.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      const rect = labelMenu.getBoundingClientRect();
+      if (rect.right > window.innerWidth) labelMenu.style.left = Math.max(4, window.innerWidth - rect.width - 4) + 'px';
+      if (rect.bottom > window.innerHeight) labelMenu.style.top = Math.max(4, window.innerHeight - rect.height - 4) + 'px';
+    });
+  }
+  window.addEventListener('mousedown', (e) => {
+    if (!labelMenu.classList.contains('hidden') && !labelMenu.contains(e.target)) hideLabelMenu();
+  });
+
+  function metaFor(a) {
+    const clip = currentClip();
+    if (!clip) return '';
+    if (a.type === 'region') {
+      const dur = a.end - a.start;
+      return `${formatTime(a.start)} → ${formatTime(a.end)} · duration ${dur.toFixed(2)}s · ${(dur / clip.duration * 100).toFixed(1)}% of clip`;
+    }
+    return `at ${formatTime(a.time)} · ${(a.time / clip.duration * 100).toFixed(1)}% into clip`;
+  }
+  function renderBottomPanel() {
+    renderTagChips();
+    const sel = selectedAnnotation();
+    populateAnnotClassSelect();
+    if (sel) {
+      annotEditor.classList.remove('hidden');
+      annotMeta.textContent = metaFor(sel);
+    } else {
+      annotEditor.classList.add('hidden');
+    }
+  }
+
+  // ---------- Status bar ----------
+  function updateStatus() {
+    const clip = currentClip();
+    const n = clip ? clip.annotations.length : 0;
+    statusLeft.textContent = `${state.clips.length} clip${state.clips.length === 1 ? '' : 's'}` +
+      (clip ? ` · ${n} annotation${n === 1 ? '' : 's'} on "${clip.filename}"` : '');
+    zoomStatus.textContent = clip ? `zoom ${Math.round(state.zoom * 100)}%` : '';
+  }
+
+  // ---------- Content hash (dependency-free, works under file://) ----------
+  function computeHashId(dataUrl) {
+    const comma = dataUrl.indexOf(',');
+    const b64 = comma === -1 ? dataUrl : dataUrl.slice(comma + 1);
+    let h1 = 0x811c9dc5, h2 = 0x811c9dc5 ^ 0x9e3779b9;
+    for (let i = 0; i < b64.length; i++) {
+      const c = b64.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 0x01000193);
+      h2 = Math.imul(h2 ^ c, 0x85ebca6b);
+    }
+    const hex1 = (h1 >>> 0).toString(16).padStart(8, '0');
+    const hex2 = (h2 >>> 0).toString(16).padStart(8, '0');
+    return (hex1 + hex2).slice(0, 12);
+  }
+
+  function extFromDataUrl(dataUrl) {
+    const m = /^data:audio\/([a-zA-Z0-9.+-]+);base64,/.exec(dataUrl);
+    if (!m) return 'bin';
+    let ext = m[1].toLowerCase();
+    if (ext === 'mpeg') ext = 'mp3';
+    if (ext === 'x-wav' || ext === 'wave') ext = 'wav';
+    if (ext === 'x-m4a') ext = 'm4a';
+    return ext;
+  }
+
+  function annotationsForExport(clip) {
+    return clip.annotations.map(a => {
+      const base = { class: a.class, color: a.color, shape_type: a.type };
+      if (a.type === 'region') {
+        base.start = round2(a.start); base.end = round2(a.end);
+        base.start_normalized = round4(a.start / clip.duration);
+        base.end_normalized = round4(a.end / clip.duration);
+      } else {
+        base.time = round2(a.time);
+        base.time_normalized = round4(a.time / clip.duration);
+      }
+      return base;
+    });
+  }
+
+  // ---------- Export: flat JSON ----------
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const embed = document.getElementById('embedAudioChk').checked;
+    const clips = state.clips.map(c => {
+      const entry = {
+        filename: c.filename, duration: round2(c.duration), sample_rate: c.sampleRate,
+        channels: c.channelCount, tags: c.tags.slice(), annotations: annotationsForExport(c)
+      };
+      if (embed) entry.audio_data = c.dataUrl;
+      return entry;
+    });
+    const payload = {
+      format: 'audiosketch-v1',
+      exported_at: new Date().toISOString(),
+      classes: state.classes.map(c => ({ name: c.name, color: c.color })),
+      clips
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audio-labels-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // ---------- Import labels JSON ----------
+  document.getElementById('importJsonBtn').addEventListener('click', () => document.getElementById('importJsonInput').click());
+  document.getElementById('importJsonInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try { applyImportedData(JSON.parse(reader.result)); }
+      catch (err) { alert('Could not parse that file as an AudioSketch JSON export.'); }
+    };
+    reader.readAsText(file);
+  });
+
+  function applyAnnotationsToClip(target, entry) {
+    (entry.tags || []).forEach(t => { if (!target.tags.includes(t)) target.tags.push(t); });
+    (entry.annotations || []).forEach(a => {
+      const color = a.color || classColor(a.class);
+      if (!state.classes.some(c => c.name === a.class)) state.classes.push({ name: a.class, color });
+      const id = ++annotSeq;
+      if (a.shape_type === 'region' && a.start_normalized != null) {
+        target.annotations.push({ id, type: 'region', class: a.class, color, start: a.start_normalized * target.duration, end: a.end_normalized * target.duration });
+      } else if (a.shape_type === 'marker' && a.time_normalized != null) {
+        target.annotations.push({ id, type: 'marker', class: a.class, color, time: a.time_normalized * target.duration });
+      }
+    });
+  }
+
+  function applyImportedData(data) {
+    (data.classes || []).forEach(c => {
+      if (!state.classes.some(x => x.name === c.name)) state.classes.push({ name: c.name, color: c.color || PALETTE[state.classes.length % PALETTE.length] });
+    });
+    if (!state.activeClassName && state.classes.length) state.activeClassName = state.classes[0].name;
+
+    const skipped = [];
+    let pending = 0, hadAny = false;
+
+    (data.clips || []).forEach(entry => {
+      const target = state.clips.find(c => c.filename === entry.filename);
+      if (target) {
+        applyAnnotationsToClip(target, entry);
+      } else if (entry.audio_data) {
+        hadAny = true; pending++;
+        const bytes = dataUrlToBytes(entry.audio_data);
+        getAudioContext().decodeAudioData(bytes.buffer.slice(0)).then(audioBuffer => {
+          const duration = Math.max(audioBuffer.duration, 0.05);
+          const pxPerSec = Math.min(BASE_PPS, MAX_TIMELINE_PX / duration);
+          const workingWidth = Math.max(20, Math.round(duration * pxPerSec));
+          const { mins, maxs } = computePeaks(audioBuffer, workingWidth);
+          const id = ++clipSeq;
+          const newClip = {
+            id, filename: uniqueName(entry.filename), dataUrl: entry.audio_data,
+            duration, sampleRate: audioBuffer.sampleRate, channelCount: audioBuffer.numberOfChannels,
+            pxPerSec, workingWidth, mins, maxs, waveLayer: null, tags: [], annotations: [],
+            hashId: computeHashId(entry.audio_data)
+          };
+          buildWaveLayer(newClip);
+          state.clips.push(newClip);
+          applyAnnotationsToClip(newClip, entry);
+          if (state.currentClipId == null) setActiveClip(id); else renderAll();
+          pending--;
+          if (pending === 0) finishImport(skipped);
+        }).catch(() => {
+          skipped.push(entry.filename + ' (invalid audio data)');
+          pending--;
+          if (pending === 0) finishImport(skipped);
+        });
+      } else {
+        skipped.push(entry.filename);
+      }
+    });
+    renderAll();
+    if (!hadAny) finishImport(skipped);
+  }
+  function finishImport(skipped) {
+    if (skipped.length) {
+      alert('No matching loaded clip for: ' + skipped.join(', ') +
+        '\n\nImport those audio files first (same filename), or use an AudioSketch export with "embed audio" checked.');
+    }
+  }
+
+  // ---------- Structured dataset export (renamed files, folders, .zip) ----------
+  const CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+  function crc32(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function dosDateTime(date) {
+    const time = ((date.getHours() & 0x1F) << 11) | ((date.getMinutes() & 0x3F) << 5) | ((date.getSeconds() >> 1) & 0x1F);
+    const day = (((date.getFullYear() - 1980) & 0x7F) << 9) | (((date.getMonth() + 1) & 0xF) << 5) | (date.getDate() & 0x1F);
+    return { time: time & 0xFFFF, date: day & 0xFFFF };
+  }
+  function buildZip(entries) {
+    const { time, date } = dosDateTime(new Date());
+    const parts = [];
+    const central = [];
+    let offset = 0;
+
+    entries.forEach(({ name, data }) => {
+      const nameBytes = new TextEncoder().encode(name);
+      const crc = crc32(data);
+      const size = data.length;
+
+      const local = new Uint8Array(30 + nameBytes.length);
+      const lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true);
+      lv.setUint16(4, 20, true);
+      lv.setUint16(6, 0x0800, true);
+      lv.setUint16(8, 0, true);
+      lv.setUint16(10, time, true);
+      lv.setUint16(12, date, true);
+      lv.setUint32(14, crc, true);
+      lv.setUint32(18, size, true);
+      lv.setUint32(22, size, true);
+      lv.setUint16(26, nameBytes.length, true);
+      lv.setUint16(28, 0, true);
+      local.set(nameBytes, 30);
+      parts.push(local, data);
+
+      const cd = new Uint8Array(46 + nameBytes.length);
+      const cv = new DataView(cd.buffer);
+      cv.setUint32(0, 0x02014b50, true);
+      cv.setUint16(4, 20, true);
+      cv.setUint16(6, 0x0800, true);
+      cv.setUint16(8, 0, true);
+      cv.setUint16(10, time, true);
+      cv.setUint16(12, date, true);
+      cv.setUint32(16, crc, true);
+      cv.setUint32(20, size, true);
+      cv.setUint32(24, size, true);
+      cv.setUint16(28, nameBytes.length, true);
+      cv.setUint16(30, 0, true);
+      cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true);
+      cv.setUint16(36, 0, true);
+      cv.setUint32(38, 0, true);
+      cv.setUint32(42, offset, true);
+      cd.set(nameBytes, 46);
+      central.push(cd);
+
+      offset += local.length + data.length;
+    });
+
+    const centralStart = offset;
+    let centralSize = 0;
+    central.forEach(c => { parts.push(c); centralSize += c.length; });
+
+    const eocd = new Uint8Array(22);
+    const ev = new DataView(eocd.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(8, entries.length, true);
+    ev.setUint16(10, entries.length, true);
+    ev.setUint32(12, centralSize, true);
+    ev.setUint32(16, centralStart, true);
+    parts.push(eocd);
+
+    return new Blob(parts, { type: 'application/zip' });
+  }
+
+  document.getElementById('exportZipBtn').addEventListener('click', () => {
+    if (!state.clips.length) { alert('Import at least one audio clip first.'); return; }
+    const keepNames = document.getElementById('keepOriginalNamesChk').checked;
+    const usedIds = new Set();
+    const entries = [];
+    const manifestClips = [];
+
+    state.clips.forEach(clip => {
+      const baseId = clip.hashId || computeHashId(clip.dataUrl);
+      let finalId = baseId, n = 2;
+      while (usedIds.has(finalId)) { finalId = `${baseId}-${n}`; n++; }
+      usedIds.add(finalId);
+
+      const ext = extFromDataUrl(clip.dataUrl);
+      const audioPath = `audio/${finalId}.${ext}`;
+      const labelPath = `labels/${finalId}.json`;
+
+      entries.push({ name: audioPath, data: dataUrlToBytes(clip.dataUrl) });
+
+      const labelObj = {
+        id: finalId, audio: audioPath,
+        duration: round2(clip.duration), sample_rate: clip.sampleRate, channels: clip.channelCount,
+        tags: clip.tags.slice(), annotations: annotationsForExport(clip)
+      };
+      if (keepNames) labelObj.original_filename = clip.filename;
+      entries.push({ name: labelPath, data: new TextEncoder().encode(JSON.stringify(labelObj, null, 2)) });
+
+      manifestClips.push(Object.assign(
+        {
+          id: finalId, audio: audioPath, label: labelPath,
+          duration: round2(clip.duration), sample_rate: clip.sampleRate, channels: clip.channelCount,
+          tags: clip.tags.slice(), annotation_count: clip.annotations.length
+        },
+        keepNames ? { original_filename: clip.filename } : {}
+      ));
+    });
+
+    const manifest = {
+      format: 'audiosketch-dataset-v1',
+      exported_at: new Date().toISOString(),
+      clip_count: state.clips.length,
+      classes: state.classes.map(c => ({ name: c.name, color: c.color })),
+      clips: manifestClips
+    };
+    entries.push({ name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) });
+
+    const blob = buildZip(entries);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audiosketch-dataset-${new Date().toISOString().slice(0, 10)}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // ---------- Render all ----------
+  function renderAll() {
+    renderClipList();
+    renderClassList();
+    renderAnnotList();
+    renderBottomPanel();
+    redrawCanvas();
+    updateStatus();
+    updateTransportUI();
+  }
+
+  showEmpty();
+  renderAll();
+})();
+</script>
+</body>
+</html>

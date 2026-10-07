@@ -312,7 +312,7 @@
   const SAFE_CANVAS_W = 16000;   // hard ceiling on the *live* canvas width at any zoom (browser canvas-size limit)
   const GLOBAL_MAX_ZOOM = 20;
 
-  // The canvas is always rendered at native 1:1 resolution (canvas.width == its own CSS width) — it is
+  // The canvas is always rendered at native 1:1 resolution (canvas.width == its own CSS width) - it is
   // resized and fully redrawn on every zoom/pan change, rather than being CSS-stretched. That avoids the
   // non-uniform-scaling distortion CSS stretching would cause (circular handles turning into ellipses, text
   // glyphs stretching horizontally) since horizontal zoom here is intentionally independent of the fixed
@@ -359,7 +359,7 @@
   const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
   const ICON_PAUSE = '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>';
 
-  // ---------- DOM refs ----------
+  // DOM refs
   const stage = document.getElementById('stage');
   const ctx = stage.getContext('2d');
   const canvasWrap = document.getElementById('canvasWrap');
@@ -386,7 +386,7 @@
   const timeDisplay = document.getElementById('timeDisplay');
   const playIcon = document.getElementById('playIcon');
 
-  // ---------- Helpers ----------
+  // Helpers
   function currentClip() { return state.clips.find(c => c.id === state.currentClipId) || null; }
   function classColor(name) { const c = state.classes.find(c => c.name === name); return c ? c.color : '#5aa9e6'; }
   function hexToRgba(hex, alpha) {
@@ -409,7 +409,7 @@
     return sharedAudioCtx;
   }
 
-  // ---------- Audio import ----------
+  // Audio import
   function uniqueName(name) {
     let candidate = name, n = 2;
     const taken = new Set(state.clips.map(c => c.filename));
@@ -562,7 +562,7 @@
     });
   }
 
-  // ---------- Active clip / canvas setup ----------
+  // Active clip / canvas setup
   function showEmpty() {
     canvasWrap.classList.add('empty');
     emptyState.style.display = 'block';
@@ -590,9 +590,9 @@
     renderAll();
   }
 
-  // ---------- Zoom ----------
+  // Zoom
   // Max zoom is capped per-clip so the live canvas width (workingWidth * zoom) never exceeds a safe
-  // browser canvas-size ceiling — long clips (already at a wide base workingWidth) get proportionally
+  // browser canvas-size ceiling - long clips (already at a wide base workingWidth) get proportionally
   // less zoom headroom than short ones.
   function maxZoomFor(clip) { return Math.max(0.02, Math.min(GLOBAL_MAX_ZOOM, SAFE_CANVAS_W / clip.workingWidth)); }
 
@@ -638,7 +638,7 @@
     setZoom(state.zoom * factor, e.clientX);
   }, { passive: false });
 
-  // ---------- Classes ----------
+  // Classes
   function addClass(name) {
     name = name.trim();
     if (!name) return;
@@ -685,7 +685,7 @@
     populateAnnotClassSelect();
   }
 
-  // ---------- Tools ----------
+  // Tools
   function setTool(tool) {
     if (tool !== 'select' && !currentClip()) return;
     state.tool = tool;
@@ -740,7 +740,7 @@
     return true;
   }
 
-  // ---------- Canvas geometry ----------
+  // Canvas geometry
   function getCanvasPos(e) {
     const rect = stage.getBoundingClientRect();
     const scaleX = stage.width / rect.width;
@@ -945,7 +945,7 @@
     else if (e.key === 'ArrowRight' && currentClip()) seekTo(audioEl.currentTime + (e.shiftKey ? 5 : 1));
   });
 
-  // ---------- Playback ----------
+  // Playback
   let rafId = null;
   function play() { if (currentClip()) audioEl.play(); }
   function pause() { audioEl.pause(); }
@@ -1001,7 +1001,7 @@
     timeDisplay.textContent = clip ? `${formatTime(audioEl.currentTime)} / ${formatTime(clip.duration)}` : '0:00.0 / 0:00.0';
   }
 
-  // ---------- Rendering ----------
+  // Rendering
   function redrawCanvas() {
     const clip = currentClip();
     if (!clip) return;
@@ -1011,7 +1011,7 @@
     drawRuler(clip);
     if (clip.waveLayer) {
       // the cached waveform bitmap is a fixed clip.workingWidth wide; scale it to the live
-      // (zoomed) canvas width — nearest-neighbor so a deep zoom reads as an honest "blown up
+      // (zoomed) canvas width - nearest-neighbor so a deep zoom reads as an honest "blown up
       // pixel", not a blurred guess at detail the precomputed peaks don't actually have
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(clip.waveLayer, 0, 0, clip.workingWidth, WAVE_H, 0, RULER_H, stage.width, WAVE_H);
@@ -1105,7 +1105,7 @@
     ctx.fillText(a.class, anchorX + padX, chipY + chipH / 2);
   }
 
-  // ---------- Annotation list / selection ----------
+  // Annotation list / selection
   function selectAnnotation(id) {
     state.selectedAnnotationId = id;
     renderAnnotList();
@@ -1152,7 +1152,7 @@
     updateStatus();
   }
 
-  // ---------- Bottom panel: tags + attribute editor ----------
+  // Bottom panel: tags + attribute editor
   function renderTagChips() {
     const clip = currentClip();
     tagChipsEl.innerHTML = '';
@@ -1206,7 +1206,7 @@
     setAnnotationClass(sel, annotClassSelect.value);
   });
 
-  // ---------- Right-click label menu ----------
+  // Right-click label menu
   function hideLabelMenu() { labelMenu.classList.add('hidden'); }
   function showLabelMenu(annotation, x, y) {
     labelMenu.innerHTML = '';
@@ -1268,7 +1268,7 @@
     }
   }
 
-  // ---------- Status bar ----------
+  // Status bar
   function updateStatus() {
     const clip = currentClip();
     const n = clip ? clip.annotations.length : 0;
@@ -1277,7 +1277,7 @@
     zoomStatus.textContent = clip ? `zoom ${Math.round(state.zoom * 100)}%` : '';
   }
 
-  // ---------- Content hash (dependency-free, works under file://) ----------
+  // Content hash (dependency-free, works under file://)
   function computeHashId(dataUrl) {
     const comma = dataUrl.indexOf(',');
     const b64 = comma === -1 ? dataUrl : dataUrl.slice(comma + 1);
@@ -1317,7 +1317,7 @@
     });
   }
 
-  // ---------- Export: flat JSON ----------
+  // Export: flat JSON
   document.getElementById('exportBtn').addEventListener('click', () => {
     const embed = document.getElementById('embedAudioChk').checked;
     const clips = state.clips.map(c => {
@@ -1343,7 +1343,7 @@
     URL.revokeObjectURL(url);
   });
 
-  // ---------- Import labels JSON ----------
+  // Import labels JSON
   document.getElementById('importJsonBtn').addEventListener('click', () => document.getElementById('importJsonInput').click());
   document.getElementById('importJsonInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -1424,7 +1424,7 @@
     }
   }
 
-  // ---------- Structured dataset export (renamed files, folders, .zip) ----------
+  // Structured dataset export (renamed files, folders, .zip)
   const CRC_TABLE = (() => {
     const table = new Uint32Array(256);
     for (let n = 0; n < 256; n++) {
@@ -1566,7 +1566,7 @@
     URL.revokeObjectURL(url);
   });
 
-  // ---------- Render all ----------
+  // Render all
   function renderAll() {
     renderClipList();
     renderClassList();
